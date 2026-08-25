@@ -20,14 +20,17 @@ __global__ void cute_gemm(half_t* const A,
         Tensor gC = make_tensor(make_gmem_ptr(C),Layout<Shape<_32,_32>,Stride<_32,_1>>{});
 
 
-        __shared__ half_t sA[32*16];
-        __shared__ half_t sB[32*16];
+        __shared__ half_t SmemA[32*16];
+        __shared__ half_t SmemB[32*16];
 
 
-        for(int i=threadIdx.x;i<32*16;++blockDim.x){
-            sA[i] = gA[i];
-            sB[i] = gB[i];
+        for(int i=threadIdx.x;i<32*16;i+=blockDim.x){
+            SmemA[i] = A[i];
+            SmemB[i] = B[i];
         }
+
+        Tensor sA = make_tensor(make_smem_ptr(SmemA),Layout<Shape<_32,_16>,Stride<_16,_1>>{});
+        Tensor sB = make_tensor(make_smem_ptr(SmemB),Layout<Shape<_32,_16>,Stride<_16,_1>>{});
 
 
 
@@ -43,7 +46,8 @@ __global__ void cute_gemm(half_t* const A,
             Tensor tcrB = thr_mma.partition_fragment_B(sB);
 
             Tensor tcgC = thr_mma.partition_C(gC);
-            Tensor tcrC = thr_mma.partition_fragment_C(tcgc);
+            Tensor tcrC = thr_mma.partition_fragment_C(tcgC);
+            clear(tcrC);
 
 
 
@@ -65,8 +69,8 @@ __global__ void cute_gemm(half_t* const A,
             Tensor txsB = thrcopyB.partition_S(sB);
 
 
-            Tensor txrA = thrcopyA.retile_D(tcsA);
-            Tensor txrB = thrcopyB.retile_D(tcsB);
+            Tensor txrA = thrcopyA.retile_D(tcrA);
+            Tensor txrB = thrcopyB.retile_D(tcrB);
 
 
 
@@ -77,7 +81,7 @@ __global__ void cute_gemm(half_t* const A,
             gemm(tiledmma,tcrA,tcrB,tcrC);
 
 
-            copy(tcrC,tcgc);
+            copy(tcrC,tcgC);
 
 
 
