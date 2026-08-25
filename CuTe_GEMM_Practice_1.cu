@@ -70,6 +70,17 @@ __global__ void cute_gemm(half_t* const A,
 
 
 
+            copy(copyAtom_A,txsA,txrA);
+            copy(copyAtom_B,txsB,txrB);
+
+
+            gemm(tiledmma,tcrA,tcrB,tcrC);
+
+
+            copy(tcrC,tcgc);
+
+
+
 
 
 
