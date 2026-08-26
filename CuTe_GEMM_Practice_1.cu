@@ -58,7 +58,7 @@ __global__ void cute_gemm(half_t* const A,
 
 
             TiledCopy tiledcopyA = make_tiled_copy_A(copyAtom_A,tiledmma);
-            TiledCopy tiledcopyB = make_tiled_copy_B(coptAtom_B,tiledmma);
+            TiledCopy tiledcopyB = make_tiled_copy_B(copyAtom_B,tiledmma);
 
 
             ThrCopy thrcopyA = tiledcopyA.get_slice(threadIdx.x);
@@ -94,8 +94,70 @@ __global__ void cute_gemm(half_t* const A,
 
 int main(){
 
+    int N = 32*16;
+    half_t* A;
+    half_t* B;
+    float* C;
+
+    size_t range = sizeof(half_t) * N;
+    size_t range_C = sizeof(float) * 32*32;
+
+
+    A = (half_t*)malloc(range);
+    B = (half_t*)malloc(range);
+    C = (float*)malloc(range_C);
+
+
+    for(int i=0;i<N;++i){
+        A[i] = 1.0f;
+        B[i] = 1.0f;
+
+    }
 
 
 
+    half_t *device_A , *device_B ; 
+    float* device_C;
+    cudaMalloc((void**)&device_A,range);
+    cudaMalloc((void**)&device_B,range);
+    cudaMalloc((void**)&device_C,range_C);
+
+
+    cudaMemcpy(device_A,A,range,cudaMemcpyHostToDevice);
+    cudaMemcpy(device_B,B,range,cudaMemcpyHostToDevice);
+
+
+
+
+    cute_gemm<<<1,128>>>(device_A,device_B,device_C);
+
+
+
+
+    cudaError_t err = cudaGetLastError();
+
+    if(err!=cudaSuccess){
+        cout<< "Kernel launch error: " << cudaGetErrorString(err) << endl;
+     return EXIT_FAILURE;
+    }
+
+    cudaDeviceSynchronize();
+
+
+    cudaMemcpy(C,device_C,range_C,cudaMemcpyDeviceToHost);
+
+
+    cout<<C[1]<<" "<<C[23]<<endl;
+
+
+    cudaFree(device_A);
+    cudaFree(device_B);
+    cudaFree(device_C);
+    free(A);
+    free(B);
+    free(C);
+
+
+    
     return 0;
 }
