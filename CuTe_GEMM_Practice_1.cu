@@ -29,6 +29,9 @@ __global__ void cute_gemm(half_t* const A,
             SmemB[i] = B[i];
         }
 
+        __syncthreads();
+
+        
         Tensor sA = make_tensor(make_smem_ptr(SmemA),Layout<Shape<_32,_16>,Stride<_16,_1>>{});
         Tensor sB = make_tensor(make_smem_ptr(SmemB),Layout<Shape<_32,_16>,Stride<_16,_1>>{});
 
@@ -46,9 +49,9 @@ __global__ void cute_gemm(half_t* const A,
             Tensor tcrB = thr_mma.partition_fragment_B(sB);
 
             Tensor tcgC = thr_mma.partition_C(gC);
-            Tensor tcrC = thr_mma.partition_fragment_C(tcgC);
+            Tensor tcrC = thr_mma.make_fragment_C(tcgC);
             clear(tcrC);
-
+           
 
 
 
@@ -78,7 +81,7 @@ __global__ void cute_gemm(half_t* const A,
             copy(copyAtom_B,txsB,txrB);
 
 
-            gemm(tiledmma,tcrA,tcrB,tcrC);
+            gemm(tiledmma,tcrA(_,_,Int<0>{}),tcrB(_,_,Int<0>{}),tcrC);
 
 
             copy(tcrC,tcgC);
@@ -158,6 +161,16 @@ int main(){
     free(C);
 
 
-    
+
+
+
+
+
+
+
+
+
+
+
     return 0;
 }
