@@ -1,4 +1,5 @@
-#include <iostream>
+//#include <iostream>
+#include <stdio.h>
 #include <cuda_runtime.h>
 #include <cute/tensor.hpp>
 #include <cute/algorithm/gemm.hpp>
@@ -20,20 +21,32 @@ __global__ void cute_gemm(half_t* const A,
         Tensor gC = make_tensor(make_gmem_ptr(C),Layout<Shape<_32,_32>,Stride<_32,_1>>{});
 
 
+        auto SmemA_layout = Layout<Shape<_32,_16>,Stride<_16,_1>>{};
+
+
         __shared__ half_t SmemA[32*16];
         __shared__ half_t SmemB[32*16];
 
 
+        auto Smem_ptr = composition(Swizzle<1,3,3>{},SmemA_layout);
+
+
+        Tensor sA = make_tensor(make_smem_ptr(SmemA),Smem_ptr);
+        Tensor sB = make_tensor(make_smem_ptr(SmemB),Layout<Shape<_32,_16>,Stride<_16,_1>>{});
+
+
+
         for(int i=threadIdx.x;i<32*16;i+=blockDim.x){
-            SmemA[i] = A[i];
+            int r = i/16;
+            int c = i%16;
+            
+            sA(r,c) = gA(r,c);
             SmemB[i] = B[i];
         }
 
         __syncthreads();
 
         
-        Tensor sA = make_tensor(make_smem_ptr(SmemA),Layout<Shape<_32,_16>,Stride<_16,_1>>{});
-        Tensor sB = make_tensor(make_smem_ptr(SmemB),Layout<Shape<_32,_16>,Stride<_16,_1>>{});
 
 
 
@@ -70,6 +83,41 @@ __global__ void cute_gemm(half_t* const A,
 
             Tensor txsA = thrcopyA.partition_S(sA);
             Tensor txsB = thrcopyB.partition_S(sB);
+
+            if(threadIdx.x==0){
+                printf("txsA:");
+                print(txsA);
+                printf("\n");
+                printf("txsB");
+                print(txsB);
+            }
+
+            int lane = threadIdx.x % 32;
+            int warp = threadIdx.x / 32;
+
+    if (warp == 0) {
+    auto p = raw_pointer_cast(txsA.data());
+
+    // 转成 shared memory address
+    unsigned int addr =
+        static_cast<unsigned int>(__cvta_generic_to_shared(p));
+
+    unsigned int base =
+        static_cast<unsigned int>(__cvta_generic_to_shared(SmemA));
+
+    int byte_offset = int(addr - base);
+    int elem_offset = byte_offset / sizeof(half_t);
+    int bank        = (byte_offset / 4) % 32;
+
+    printf(
+        "lane:%2d  elem:%3d  byte:%3d  bank:%2d\n",
+        lane,
+        elem_offset,
+        byte_offset,
+        bank
+    );
+}
+  
 
 
             Tensor txrA = thrcopyA.retile_D(tcrA);
@@ -150,7 +198,7 @@ int main(){
     cudaMemcpy(C,device_C,range_C,cudaMemcpyDeviceToHost);
 
 
-    cout<<C[1]<<" "<<C[23]<<endl;
+    //cout<<C[1]<<" "<<C[23]<<endl;
 
 
     cudaFree(device_A);
