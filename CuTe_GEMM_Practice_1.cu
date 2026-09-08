@@ -22,17 +22,18 @@ __global__ void cute_gemm(half_t* const A,
 
 
         auto SmemA_layout = Layout<Shape<_32,_16>,Stride<_16,_1>>{};
-
+        auto SmemB_layout = Layout<Shape<_32,_16>,Stride<_16,_1>>{};
 
         __shared__ half_t SmemA[32*16];
         __shared__ half_t SmemB[32*16];
 
 
         auto Smem_ptr = composition(Swizzle<1,3,3>{},SmemA_layout);
+        auto Smem_ptr_1 = composition(Swizzle<1,3,3>{},SmemB_layout); 
 
 
         Tensor sA = make_tensor(make_smem_ptr(SmemA),Smem_ptr);
-        Tensor sB = make_tensor(make_smem_ptr(SmemB),Layout<Shape<_32,_16>,Stride<_16,_1>>{});
+        Tensor sB = make_tensor(make_smem_ptr(SmemB),Smem_ptr_1);
 
 
 
@@ -41,7 +42,7 @@ __global__ void cute_gemm(half_t* const A,
             int c = i%16;
             
             sA(r,c) = gA(r,c);
-            SmemB[i] = B[i];
+            sB(r,c) = gB(r,c);
         }
 
         __syncthreads();
@@ -95,7 +96,7 @@ __global__ void cute_gemm(half_t* const A,
             int lane = threadIdx.x % 32;
             int warp = threadIdx.x / 32;
 
-    if (warp == 0) {
+    /*if (warp == 0) {
     auto p = raw_pointer_cast(txsA.data());
 
     // 转成 shared memory address
@@ -116,7 +117,7 @@ __global__ void cute_gemm(half_t* const A,
         byte_offset,
         bank
     );
-}
+}  */
   
 
 
