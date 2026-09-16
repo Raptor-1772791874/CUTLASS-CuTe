@@ -37,13 +37,46 @@ __global__ void cute_gemm(half_t* const A,
 
 
 
-        for(int i=threadIdx.x;i<32*16;i+=blockDim.x){
+        //native从GToS搬送数据
+        /*for(int i=threadIdx.x;i<32*16;i+=blockDim.x){
             int r = i/16;
             int c = i%16;
             
             sA(r,c) = gA(r,c);
             sB(r,c) = gB(r,c);
+        }*/
+
+
+
+        using G2SAtom = Copy_Atom<UniversalCopy<uint128_t>,half_t>;
+
+
+        TiledCopy g2s_copy = make_tiled_copy(G2SAtom{},Layout<Shape<_32,_2>,Stride<_2,_1>>{},Layout<Shape<_1,_8>>{});
+
+
+        if(threadIdx.x < 64){
+            
+            ThrCopy thr_g2s = g2s_copy.get_slice(threadIdx.x);
+
+            Tensor tAgA = thr_g2s.partition_S(gA);
+            Tensor tAsA = thr_g2s.partition_D(sA);
+
+            copy(g2s_copy,tAgA,tAsA);
+
         }
+        else{
+
+            int copy_id = threadIdx.x - 64;
+
+            ThrCopy thr_g2s = g2s_copy.get_slice(copy_id);
+
+            Tensor tBgB = thr_g2s.partition_S(gB);
+            Tensor tBsB = thr_g2s.partition_D(sB);
+
+            copy(g2s_copy,tBgB,tBsB);
+        }
+
+
 
         __syncthreads();
 
@@ -85,7 +118,9 @@ __global__ void cute_gemm(half_t* const A,
             Tensor txsA = thrcopyA.partition_S(sA);
             Tensor txsB = thrcopyB.partition_S(sB);
 
-            if(threadIdx.x==0){
+
+            //查找BankConflict，据结果设计Swizzle
+            /*if(threadIdx.x==0){
                 printf("txsA:");
                 print(txsA);
                 printf("\n");
@@ -94,7 +129,7 @@ __global__ void cute_gemm(half_t* const A,
             }
 
             int lane = threadIdx.x % 32;
-            int warp = threadIdx.x / 32;
+            int warp = threadIdx.x / 32;*/
 
     /*if (warp == 0) {
     auto p = raw_pointer_cast(txsA.data());
