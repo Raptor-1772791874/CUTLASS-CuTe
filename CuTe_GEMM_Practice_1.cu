@@ -48,7 +48,7 @@ __global__ void cute_gemm(half_t* const A,
 
 
 
-        using G2SAtom = Copy_Atom<UniversalCopy<uint128_t>,half_t>;
+        using G2SAtom = Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<uint128_t>,half_t>;
 
 
         TiledCopy g2s_copy = make_tiled_copy(G2SAtom{},Layout<Shape<_32,_2>,Stride<_2,_1>>{},Layout<Shape<_1,_8>>{});
@@ -76,6 +76,11 @@ __global__ void cute_gemm(half_t* const A,
             copy(g2s_copy,tBgB,tBsB);
         }
 
+
+
+        cp_async_fence();
+        cp_sync_wait<0>();
+      
 
 
         __syncthreads();
