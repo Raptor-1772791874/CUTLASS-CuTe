@@ -4,6 +4,7 @@
 #include <cute/tensor.hpp>
 #include <cute/algorithm/gemm.hpp>
 #include <cute/algorithm/copy.hpp>
+#include <cute/arch/copy_sm80.hpp>
 
 using namespace std;
 using namespace cute;
