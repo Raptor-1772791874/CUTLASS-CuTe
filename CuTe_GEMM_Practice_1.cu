@@ -17,13 +17,28 @@ __global__ void cute_gemm(half_t* const A,
     half_t* const B,
     float* C){
 
-        Tensor gA = make_tensor(make_gmem_ptr(A),Layout<Shape<_32,_16>,Stride<_16,_1>>{});
-        Tensor gB = make_tensor(make_gmem_ptr(B),Layout<Shape<_32,_16>,Stride<_16,_1>>{});
+        Tensor gA = make_tensor(make_gmem_ptr(A),Layout<Shape<_32,_128>,Stride<_128,_1>>{});
+        Tensor gB = make_tensor(make_gmem_ptr(B),Layout<Shape<_32,_128>,Stride<_128,_1>>{});
         Tensor gC = make_tensor(make_gmem_ptr(C),Layout<Shape<_32,_32>,Stride<_32,_1>>{});
+
+
+        constexpr int K = 128;
+        constexpr int BK = 16;
+
+        clear(tcrC);
+
+
+
+        for(int k0=0;k0<K;k0+=BK){
+
+
+        Tensor gA_tile = make_tensor(make_geme_ptr(A+k0),Layout<Shape<_32,_16>,Stride<_128,_1>>{});
+        Tensor gB_tile = make_tensor(make_gmem_ptr(B+k0),Layout<Shape<_32,_16>,Stride<_128,_1>>{});
 
 
         auto SmemA_layout = Layout<Shape<_32,_16>,Stride<_16,_1>>{};
         auto SmemB_layout = Layout<Shape<_32,_16>,Stride<_16,_1>>{};
+
 
         __shared__ half_t SmemA[32*16];
         __shared__ half_t SmemB[32*16];
@@ -38,17 +53,6 @@ __global__ void cute_gemm(half_t* const A,
 
 
 
-        //native从GToS搬送数据
-        /*for(int i=threadIdx.x;i<32*16;i+=blockDim.x){
-            int r = i/16;
-            int c = i%16;
-            
-            sA(r,c) = gA(r,c);
-            sB(r,c) = gB(r,c);
-        }*/
-
-
-
         using G2SAtom = Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<uint128_t>,half_t>;
 
 
@@ -59,7 +63,7 @@ __global__ void cute_gemm(half_t* const A,
             
             ThrCopy thr_g2s = g2s_copy.get_slice(threadIdx.x);
 
-            Tensor tAgA = thr_g2s.partition_S(gA);
+            Tensor tAgA = thr_g2s.partition_S(gA_tile);
             Tensor tAsA = thr_g2s.partition_D(sA);
 
             copy(g2s_copy,tAgA,tAsA);
@@ -71,7 +75,7 @@ __global__ void cute_gemm(half_t* const A,
 
             ThrCopy thr_g2s = g2s_copy.get_slice(copy_id);
 
-            Tensor tBgB = thr_g2s.partition_S(gB);
+            Tensor tBgB = thr_g2s.partition_S(gB_tile);
             Tensor tBsB = thr_g2s.partition_D(sB);
 
             copy(g2s_copy,tBgB,tBsB);
@@ -80,7 +84,7 @@ __global__ void cute_gemm(half_t* const A,
 
 
         cp_async_fence();
-        cp_sync_wait<0>();
+        cp_async_wait<0>();
       
 
 
@@ -103,7 +107,6 @@ __global__ void cute_gemm(half_t* const A,
 
             Tensor tcgC = thr_mma.partition_C(gC);
             Tensor tcrC = thr_mma.make_fragment_C(tcgC);
-            clear(tcrC);
            
 
 
@@ -172,6 +175,10 @@ __global__ void cute_gemm(half_t* const A,
 
 
             gemm(tiledmma,tcrA(_,_,Int<0>{}),tcrB(_,_,Int<0>{}),tcrC);
+        
+        
+            __syncthreads();
+        }
 
 
             copy(tcrC,tcgC);
@@ -187,7 +194,7 @@ __global__ void cute_gemm(half_t* const A,
 
 int main(){
 
-    int N = 32*16;
+    int N = 32*128;
     half_t* A;
     half_t* B;
     float* C;
