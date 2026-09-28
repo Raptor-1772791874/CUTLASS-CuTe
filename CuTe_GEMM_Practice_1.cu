@@ -92,13 +92,51 @@ __global__ void cute_gemm(half_t* const A,
             Tensor txrB = thrcopyB.retile_D(tcrB);
 
 
+            //预取tile0
+            Tensor gAtile0 = make_tensor(make_gmem_ptr(A),Layout<Shape<_32,_16>,Stride<_128,_1>>{});
+            Tensor gBtile0 = make_tensor(make_gmem_ptr(B),Layout<Shape<_32,_16>,Stride<_128,_1>>{});
+
+
+            if(threadIdx.x<64){
+
+
+                ThrCopy g2s_tile0 = g2s_copy.getslice(threadIdx.x);
+                Tensor tAgA_0 = g2s_tile0.partition_S(gAtile0)
+                Tensor tAsA_0 = g2s_tile0.partition_D(sA_0);
+ 
+
+                copy(g2scopy,tAgA_O,tAsA_0);
+
+            }
+            else{
+
+
+                int lane = threadIdx.x-64;
+                ThrCopy g2s_tile0 = g2s_copy.get_slice(lane);
+                Tensor tBgB = g2s_tile0.partition_S(gBtile0);
+                Tensor tBsB = g2s_tile0.partition_D(sB_0);
+                
+                
+                copy(g2s_tile0,tBgB,tBsB);
+
+            }
+
+
+            cp_async_fence();
+            cp_async_wait<0>();
+
+            __syncthreads();
+
 
 
         for(int kt=0;kt<K/BK;++kt){
 
 
-            int k0 = kt*BK;
             int stage = kt & 1;
+
+            if(kt>0){
+
+            int k0 = kt*BK;
 
 
         Tensor gA_tile = make_tensor(make_gmem_ptr(A+k0),Layout<Shape<_32,_16>,Stride<_128,_1>>{});
@@ -147,6 +185,8 @@ __global__ void cute_gemm(half_t* const A,
             cp_async_wait<0>();
       
           __syncthreads();
+        
+        }
 
             
 
