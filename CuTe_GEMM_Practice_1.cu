@@ -132,25 +132,29 @@ __global__ void cute_gemm(half_t* const A,
         for(int kt=0;kt<K/BK;++kt){
 
 
-            int stage = kt & 1;
+            int Compute_stage = kt & 1;
+            int Next_stage = Compute_stage ^ 1;
 
-            if(kt>0){
+            //它来回答是否有下一个块需要prefetch
+            bool has_next = (kt+1 < K/BK);
+ 
+            int next_k0 = (kt+1)*BK;
 
-            int k0 = kt*BK;
 
+            if(has_next){
 
-        Tensor gA_tile = make_tensor(make_gmem_ptr(A+k0),Layout<Shape<_32,_16>,Stride<_128,_1>>{});
-        Tensor gB_tile = make_tensor(make_gmem_ptr(B+k0),Layout<Shape<_32,_16>,Stride<_128,_1>>{});
+        Tensor gA_Next_tile = make_tensor(make_gmem_ptr(A+next_k0),Layout<Shape<_32,_16>,Stride<_128,_1>>{});
+        Tensor gB_Next_tile = make_tensor(make_gmem_ptr(B+next_k0),Layout<Shape<_32,_16>,Stride<_128,_1>>{});
 
 
 
         if(threadIdx.x < 64){
             
             ThrCopy thr_g2s = g2s_copy.get_slice(threadIdx.x);
-            Tensor tAgA = thr_g2s.partition_S(gA_tile);
+            Tensor tAgA = thr_g2s.partition_S(gA_Next_tile);
 
 
-            if(stage==0){
+            if(Next_stage==0){
             Tensor tAsA = thr_g2s.partition_D(sA_0);
             copy(g2s_copy,tAgA,tAsA);
             }
@@ -165,16 +169,16 @@ __global__ void cute_gemm(half_t* const A,
             int copy_id = threadIdx.x - 64;
 
             ThrCopy thr_g2s = g2s_copy.get_slice(copy_id);
-            Tensor tBgB = thr_g2s.partition_S(gB_tile);
+            Tensor tBgB = thr_g2s.partition_S(gB_Next_tile);
 
             
-            if(stage==0){
+            if(Next_stage==0){
             Tensor tBsB = thr_g2s.partition_D(sB_0);
             copy(g2s_copy,tBgB,tBsB);
             }
 
             else{
-            Tnesor tBsB = thr_g2s.partition_D(sB_1);
+            Tensor tBsB = thr_g2s.partition_D(sB_1);
             copy(g2s_copy,tBgB,tBsB);
             }
 
@@ -182,15 +186,12 @@ __global__ void cute_gemm(half_t* const A,
 
 
             cp_async_fence();
-            cp_async_wait<0>();
-      
-          __syncthreads();
         
         }
 
             
 
-          if(stage==0){
+          if(Compute_stage==0){
             copy(copyAtom_A,txsA_0,txrA);
             copy(copyAtom_B,txsB_0,txrB);
           }
@@ -201,8 +202,17 @@ __global__ void cute_gemm(half_t* const A,
 
 
             gemm(tiledmma,tcrA(_,_,Int<0>{}),tcrB(_,_,Int<0>{}),tcrC);
+
+
+
+            //保证Barrier正确，如果是最后一次循环则不会进入触发sync
+            if(has_next){
+
+                cp_async_wait<0>();
+                __syncthreads();
+
+            }
         
-            __syncthreads();
         
         
         }
