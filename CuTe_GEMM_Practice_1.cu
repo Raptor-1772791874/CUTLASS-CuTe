@@ -82,8 +82,8 @@ __global__ void cute_gemm(half_t* const A,
 
 
             Tensor txsA_0 = thrcopyA.partition_S(sA_0);
-            Tnesor txsA_1 = thrCopyA.partition_S(sA_1);
-            Tensor txsB_0 = thrCopyA.partition_S(sB_0);
+            Tensor txsA_1 = thrcopyA.partition_S(sA_1);
+            Tensor txsB_0 = thrcopyA.partition_S(sB_0);
             Tensor txsB_1 = thrcopyB.partition_S(sB_1);
 
   
@@ -100,12 +100,12 @@ __global__ void cute_gemm(half_t* const A,
             if(threadIdx.x<64){
 
 
-                ThrCopy g2s_tile0 = g2s_copy.getslice(threadIdx.x);
-                Tensor tAgA_0 = g2s_tile0.partition_S(gAtile0)
+                ThrCopy g2s_tile0 = g2s_copy.get_slice(threadIdx.x);
+                Tensor tAgA_0 = g2s_tile0.partition_S(gAtile0);
                 Tensor tAsA_0 = g2s_tile0.partition_D(sA_0);
  
 
-                copy(g2scopy,tAgA_O,tAsA_0);
+                copy(g2s_copy,tAgA_0,tAsA_0);
 
             }
             else{
@@ -117,7 +117,7 @@ __global__ void cute_gemm(half_t* const A,
                 Tensor tBsB = g2s_tile0.partition_D(sB_0);
                 
                 
-                copy(g2s_tile0,tBgB,tBsB);
+                copy(g2s_copy,tBgB,tBsB);
 
             }
 
